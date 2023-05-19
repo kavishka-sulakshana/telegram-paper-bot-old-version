@@ -73,7 +73,7 @@ async def enter_barcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def enter_paper_no(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     text = update.message.text
     context.user_data["paper"] = text
-    pprint.pprint(context.user_data)
+    # pprint.pprint(context.user_data)
 
     if context.user_data["choice"] == "🔖  Get Marks":
         params = {"barcode": context.user_data["barcode"], "paper_no": context.user_data["paper"]}
