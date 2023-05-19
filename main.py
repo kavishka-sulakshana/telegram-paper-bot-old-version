@@ -1,5 +1,7 @@
 
 import logging
+import pprint
+import requests
 from typing import Dict
 
 from telegram import __version__ as TG_VER
@@ -26,6 +28,7 @@ from telegram.ext import (
 )
 import os
 import keyBoards
+import helperFunctions
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -39,6 +42,9 @@ logger = logging.getLogger(__name__)
 
 # Starting the program of telegram bot ____________________________________________________________________________
 
+WEBHOOK_LINK_2 = "https://script.google.com/macros/s/AKfycbzY3dS4N2VkGMmPpY4tOgXZEmzTtFI9K26WLWM4mVdiQmzdjgGqVHrVxE4i4KhMOKMkDw/exec"
+
+
 # States
 TYPING_BARCODE, CHOOSING, TYPING_PAPER = range(3)
 
@@ -48,11 +54,81 @@ markup_1 = ReplyKeyboardMarkup(keyBoards.reply_keyboard_1, one_time_keyboard=Tru
 # Functions for the bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "This bot will help you to get your papers and marks\n"
-        "Choose an option : ",
-        reply_markup=markup_1,
+        "Enter your barcode : "
     )
     return TYPING_BARCODE
+
+
+async def enter_barcode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text
+    context.user_data["barcode"] = text
+    await update.message.reply_text(
+        "This bot will help you to get your papers and marks\n"
+        "Choose an option : "
+        , reply_markup=markup_1
+    )
+    return CHOOSING
+
+
+async def enter_paper_no(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text
+    context.user_data["paper"] = text
+    pprint.pprint(context.user_data)
+
+    if context.user_data["choice"] == "🔖  Get Marks":
+        params = {"barcode": context.user_data["barcode"], "paper_no": context.user_data["paper"]}
+        paper_no = params["paper_no"]
+        sheet_id = "Paper " + params["paper_no"]
+        data = {"message": params['barcode'], "chat_id": update.message.chat_id, "paper_no": paper_no, "sheet_id": sheet_id}
+        response = requests.post(WEBHOOK_LINK_2, data=data)
+        response_data = response.json()
+
+        if response_data["status"] == "success":
+            data_record = response_data["data"][0]
+            await update.message.reply_html(helperFunctions.generate_beautiful_message(
+                name=data_record[1],
+                marks=data_record[4],
+                Drank=data_record[0],
+                Arank="-",
+                link="-",
+                year="2023",
+                paper_no=paper_no,
+                ptype="ONLINE"
+            ))
+        elif response_data["status"] == "failed":
+            await update.message.reply_text(response_data["message"])
+        else:
+            await update.message.reply_text("Something went wrong")
+
+    elif context.user_data["choice"] == "🧾  Get Paper":
+        await update.message.reply_html("This Feature is not available yet.")
+    else:
+        await update.message.reply_text("Invalid Choice")
+
+    await update.message.reply_text(
+        "This bot will help you to get your papers and marks\n"
+        "Choose an option : "
+        , reply_markup=markup_1
+    )
+    return CHOOSING
+
+
+async def get_marks(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text
+    context.user_data["choice"] = text
+    await update.message.reply_text(
+        "Enter your paper no : "
+    )
+    return TYPING_PAPER
+
+
+async def get_papers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text
+    context.user_data["choice"] = text
+    await update.message.reply_text(
+        "Enter your paper no : "
+    )
+    return TYPING_PAPER
 
 
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -71,13 +147,22 @@ def main() -> None:
         entry_points=[CommandHandler("start", start)],
         states={
             CHOOSING: [
-
+                MessageHandler(
+                    filters.Regex("^🔖  Get Marks$"), get_marks
+                ),
+                MessageHandler(
+                    filters.Regex("^🧾  Get Paper$"), get_papers
+                ),
             ],
             TYPING_BARCODE: [
-
+                MessageHandler(
+                    filters.Regex("^[0-9]{8,10}$"), enter_barcode
+                )
             ],
             TYPING_PAPER: [
-
+                MessageHandler(
+                    filters.Regex("^[0-9]{2}$"), enter_paper_no
+                )
             ],
         },
         fallbacks=[MessageHandler(filters.Regex("^❌  Close"), done)],
