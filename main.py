@@ -42,11 +42,12 @@ logger = logging.getLogger(__name__)
 
 # Starting the program of telegram bot ____________________________________________________________________________
 
-WEBHOOK_LINK_2 = "https://script.google.com/macros/s/AKfycbzY3dS4N2VkGMmPpY4tOgXZEmzTtFI9K26WLWM4mVdiQmzdjgGqVHrVxE4i4KhMOKMkDw/exec"
+WEBHOOK_LINK_2 = os.getenv("WEBHOOK_PAPERS")
+WEBHOOK_LINK_CMP = os.getenv("WEBHOOK_COMPS")
 
 
 # States
-TYPING_BARCODE, CHOOSING, TYPING_PAPER = range(3)
+TYPING_BARCODE, CHOOSING, TYPING_PAPER, TYPING_ISSUE = range(4)
 
 markup_1 = ReplyKeyboardMarkup(keyBoards.reply_keyboard_1, one_time_keyboard=True)
 
@@ -106,7 +107,6 @@ async def enter_paper_no(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Invalid Choice")
 
     await update.message.reply_text(
-        "This bot will help you to get your papers and marks\n"
         "Choose an option : "
         , reply_markup=markup_1
     )
@@ -131,10 +131,50 @@ async def get_papers(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return TYPING_PAPER
 
 
+async def paper_issue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text
+    context.user_data["choice"] = text
+    await update.message.reply_text(
+        "Enter Your Complaint : "
+    )
+    return TYPING_ISSUE
+
+
+async def enter_paper_issue(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    text = update.message.text
+    context.user_data["issue"] = text
+    data = {
+        "barcode": context.user_data['barcode'],
+        "chat_id": update.message.chat_id,
+        "complaint": context.user_data["issue"]
+    }
+
+    response = requests.post(WEBHOOK_LINK_CMP, data=data)
+    response_data = response.json()
+    if response_data["status"] == "success":
+        await update.message.reply_text(
+            "\n 👨🏼‍💻 Your Complaint has been recorded !  📥 \n"
+            "\n 🎲  We will check it soon 🔰🔰 \n"
+        )
+    else:
+        await update.message.reply_text(response_data["message"])
+
+    await update.message.reply_text(
+        "Choose an option : "
+        , reply_markup=markup_1
+    )
+    return CHOOSING
+
+
 async def done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_data: Dict[str, str] = context.user_data
+    user_data = context.user_data
     user_data.clear()
-    await update.message.reply_text("Bye! I hope we can talk again some day.")
+    await update.message.reply_html(
+        "\n<b>👋🏼 Bye! </b>\n"
+        "\nGood Luck for your exams. 😄😄\n"
+        "\n<u>To start again</u> /start 😎\n",
+        reply_markup=ReplyKeyboardRemove(),
+    )
     return ConversationHandler.END
 
 
@@ -153,6 +193,9 @@ def main() -> None:
                 MessageHandler(
                     filters.Regex("^🧾  Get Paper$"), get_papers
                 ),
+                MessageHandler(
+                    filters.Regex("^📍 Paper Issues$"), paper_issue
+                ),
             ],
             TYPING_BARCODE: [
                 MessageHandler(
@@ -164,6 +207,11 @@ def main() -> None:
                     filters.Regex("^[0-9]{2}$"), enter_paper_no
                 )
             ],
+            TYPING_ISSUE: [
+                MessageHandler(
+                    filters.TEXT, enter_paper_issue
+                )
+            ]
         },
         fallbacks=[MessageHandler(filters.Regex("^❌  Close"), done)],
     )
